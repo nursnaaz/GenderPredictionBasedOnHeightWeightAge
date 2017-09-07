@@ -1,0 +1,581 @@
+---
+title: "Predicting Gender based on height, weight and age"
+output: html_notebook
+---
+
+#########################################################################################
+### DATA Loading
+#########################################################################################
+
+Function to check library is there in current machine or not, If not it will install and load in Environment 
+```{r}
+
+usePackage <- function(p) 
+{
+  if (!is.element(p, installed.packages()[,1]))
+    install.packages(p, dep = TRUE)
+  require(p, character.only = TRUE)
+}
+
+```
+
+
+Loading the required packages
+List of library to be loaded in environment
+
+```{r}
+usePackage("ggplot2")
+usePackage("lubridate")
+usePackage("ROSE")
+usePackage("usdm")
+usePackage("DMwR")
+usePackage("randomForest")
+usePackage("vegan")
+usePackage("arm")
+usePackage("car")
+usePackage("MASS")
+usePackage("caret")
+usePackage("ROCR")
+usePackage("ggplot2")
+usePackage("e1071")
+usePackage("infotheo")
+usePackage("C50")
+usePackage("rpart")
+usePackage("ada")
+usePackage("h2o")
+usePackage("xgboost")
+usePackage("tcltk")
+
+```
+
+
+Loading the data and assigning it to the variable
+```{r}
+
+userData <- read.csv("data.csv")
+
+```
+
+Diagnosing the structure of data
+```{r}
+
+str(userData)
+
+```
+Diagnosing the summary of the data
+
+```{r}
+
+summary(userData)
+
+```
+
+Checking the dimension of the data
+```{r}
+
+dim(userData)
+
+```
+
+Viewing the first 6 rows
+```{r}
+
+head(userData)
+
+```
+
+
+Finding the incompleteness in data
+
+```{r}
+
+nrows <- nrow(userData)
+ncomplete <- sum(complete.cases(userData))
+ncomplete
+
+```
+
+Percentage of data completion
+
+```{r}
+
+ncomplete/nrows
+
+rm(ncomplete,nrows)
+
+```
+
+
+Checking for Missing values
+
+```{r}
+
+sum(is.na(userData))
+
+```
+No missing values
+
+Checking for outliers
+```{r}
+
+apply(userData[,c(2,3,4,5)],2,function(x){boxplot(x)$out})
+
+```
+Outliers are there
+We can remove the outliers or can replace it with the median
+
+I am removing the ouliers. I removing because there were only 3 data which is very minimal.
+
+
+Function to remove oulier and plot boxplot
+```{r}
+
+outlierKD <- function(dt, var) {
+     var_name <- eval(substitute(var),eval(dt))
+     na1 <- sum(is.na(var_name))
+     m1 <- mean(var_name, na.rm = T)
+     par(mfrow=c(2, 2), oma=c(0,0,3,0))
+     boxplot(var_name, main="With outliers")
+     hist(var_name, main="With outliers", xlab=NA, ylab=NA)
+     outlier <- boxplot.stats(var_name)$out
+     mo <- mean(outlier)
+     var_name <- ifelse(var_name %in% outlier, NA, var_name)
+     boxplot(var_name, main="Without outliers")
+     hist(var_name, main="Without outliers", xlab=NA, ylab=NA)
+     title("Outlier Check", outer=TRUE)
+     na2 <- sum(is.na(var_name))
+     cat("Outliers identified:", na2 - na1, "n")
+     cat("Propotion (%) of outliers:", round((na2 - na1) / sum(!is.na(var_name))*100, 1), "n")
+     cat("Mean of the outliers:", round(mo, 2), "n")
+     m2 <- mean(var_name, na.rm = T)
+     cat("Mean without removing outliers:", round(m1, 2), "n")
+     cat("Mean if we remove outliers:", round(m2, 2), "n")
+     response <- readline(prompt="Do you want to remove outliers and to replace with NA? [yes/no]: ")
+     response = "yes"
+     if(response == "y" | response == "yes"){
+          dt[as.character(substitute(var))] <- invisible(var_name)
+          assign(as.character(as.list(match.call())$dt), dt, envir = .GlobalEnv)
+          cat("Outliers successfully removed", "n")
+          return(invisible(dt))
+     } else{
+          cat("Nothing changed", "n")
+          return(invisible(var_name))
+     }
+}
+
+```
+
+
+Replacing the outlier with NA for age column
+
+```{r}
+
+outlierKD(userData, age)
+
+```
+
+Replacing the outlier with NA for height column
+
+```{r}
+
+outlierKD(userData, height)
+
+```
+
+Replacing the outlier with NA for weight column
+
+```{r}
+
+outlierKD(userData, weight)
+
+
+```
+
+
+Considering only complete data ignoring NA values
+```{r}
+
+userData <- userData[complete.cases(userData), ]
+
+```
+
+Checking unique number of data in each column
+
+```{r}
+
+apply(userData,2,function(x){length(unique(x))})
+
+
+```
+
+Checking the unique number of rows
+
+```{r}
+
+nrow(unique(userData))
+
+```
+
+Finding the duplicated rows
+```{r}
+
+userData[duplicated(userData), ]
+
+```
+
+Considering only the unique data
+
+```{r}
+
+userData <- unique(userData)
+
+```
+
+
+Converting the gender to factor variable
+```{r}
+
+#userData$male <- as.numeric(as.factor(userData$male))
+
+#userData$male <- ifelse(userData$male=="1",0,1)
+
+#userData$male <- as.factor(userData$male)
+
+```
+
+Rechecking the data
+```{r}
+
+str(userData)
+
+```
+
+Converting the target variable to numberic
+```{r}
+
+userData$target <- ifelse(userData$male == 'f', 0, 1)
+
+```
+
+
+Ploting the correlation
+```{r}
+
+plot(userData)
+cor(userData[,-1])
+
+```
+
+```{r}
+
+cor(userData$year,userData$age)
+
+cor(userData$height,userData$target)
+
+```
+Plotting the graph
+```{r}
+
+plot(userData$age,userData$male)
+
+plot(userData$height,userData$weight)
+
+```
+
+Finding total data count using sql
+```{r}
+
+sqldf::sqldf('select count(*) from userData')
+
+
+```
+
+#########################################################################################
+### FEATURE ENGINEERING
+#########################################################################################
+
+Concatenating height and age column
+```{r}
+
+userData$comb1 <- paste(userData$height,userData$age,sep = '.')
+
+```
+
+Rechecking the data
+```{r}
+
+str(userData)
+
+```
+
+Independent Atrribute selection
+```{r}
+
+attributes <- setdiff(names(userData),c('target'))
+
+attributes
+
+```
+
+```{r}
+
+select <- c('Select ')
+case <- ', sum(case when target = 1 then 1 else 0 end) as True, sum(case when target = 1 then 1 else 0 end)+(sum(case when target = 0 then 1 else 0 end)) as Total from userData group by '
+
+
+```
+
+
+Creating Frequency tables for all Individual attributes against the Class variable dynamically
+
+```{r}
+
+for (i in 1:length(attributes)){
+
+  assign(attributes[i],sqldf::sqldf(paste(select,attributes[i],case,attributes[i],sep = '')))
+
+}
+
+```
+
+Calcuating response rate for each attribute
+
+```{r}
+
+age     <- cbind(age[1],age[2]/age[3])
+comb1   <- cbind(comb1[1],comb1[2]/comb1[3])
+height  <- cbind(height[1],height[2]/height[3])
+weight  <- cbind(weight[1],weight[2]/weight[3])
+year    <- cbind(year[1],year[2]/year[3])
+
+```
+
+Remove unnecessary attribute
+```{r}
+
+rm(select,case,i,attributes)
+
+```
+
+
+Creating a new data out of the response rate
+
+```{r}
+
+num_Data <- sqldf::sqldf('select a.True age, b.True comb, c.True height,d.True weight, e.True year , m.target
+                            from userData m
+                            inner join age a on m.age = a.age
+                            inner join comb1 b on m.comb1 = b.comb1
+                            inner join height c on m.height = c.height
+                            inner join weight d on m.weight = d.weight
+                            inner join year e on m.year = e.year
+                            ')
+
+```
+
+
+Finding the correlation of new derived data
+
+```{r}
+
+cor(num_Data)
+
+
+```
+
+Removing unwanted/unused variables and relinquishing memory.
+
+```{r}
+
+rm(list= ls()[!(ls() %in% c('num_Data','userData'))])
+
+```
+
+Ploting the data between derived and target variable
+
+```{r}
+
+plot(num_Data$comb,num_Data$target)
+
+```
+Rechecking the structure of the data
+
+```{r}
+
+str(num_Data)
+
+
+```
+
+
+Splitting the data to train and test
+```{r}
+
+set.seed(1234)
+train_index = sample(x = nrow(num_Data),size = 0.7*nrow(num_Data))
+train = num_Data[train_index,]
+test = num_Data[-train_index,]
+
+
+```
+
+
+Finding the proprtion of gender in each data frame
+
+```{r}
+
+table(num_Data$target)
+table(train$target)
+table(test$target)
+
+```
+#########################################################################################
+### Model Developement and  Model Validation
+#########################################################################################
+
+
+#########################################################################################
+### Logistic Regression
+#########################################################################################
+
+```{r}
+
+
+LogReg <- glm(target ~ ., data=train, family=binomial)
+summary(LogReg)
+#
+step(glm(target ~ .,data=train),direction = 'backward')
+# step gave me NdcId + DoctorID + com3Id +Transdate, But removing Transdate gave a slight improvement.
+LogReg <- glm(formula = target ~ comb + weight ,
+              data = train)
+
+# train results
+prob<-predict(LogReg, type="response")
+pred_class <- ifelse(prob> 0.4, 1, 0)
+table(train$target,pred_class)
+
+# Error Metric
+
+conf.mat = table(train$target,pred_class)
+cat("Accuracy : ",sum(diag(conf.mat))/sum(conf.mat))
+cat("Recall : ",conf.mat[2,2]/sum(conf.mat[2,]))
+cat("precision : ", conf.mat[2,2]/sum(conf.mat[,2]))
+cat("F1 Score : ", 2*(conf.mat[2,2]/sum(conf.mat[,2])*conf.mat[2,2]/sum(conf.mat[2,]))/((conf.mat[2,2]/sum(conf.mat[,2])+conf.mat[2,2]/sum(conf.mat[2,]))))
+
+# Test results
+fitted.results <- predict(LogReg,test,type='response')
+fitted.class <- ifelse(fitted.results > 0.4,1,0)
+table(test$target,fitted.class)
+
+# Error Metric
+conf.mat = table(test$target,fitted.class)
+cat("Accuracy : ",sum(diag(conf.mat))/sum(conf.mat))
+cat("Recall : ",conf.mat[2,2]/sum(conf.mat[2,]))
+cat("precision : ", conf.mat[2,2]/sum(conf.mat[,2]))
+cat("F1 Score : ", 2*(conf.mat[2,2]/sum(conf.mat[,2])*conf.mat[2,2]/sum(conf.mat[2,]))/((conf.mat[2,2]/sum(conf.mat[,2])+conf.mat[2,2]/sum(conf.mat[2,]))))
+
+#Ploting the ROC curve and calculate the AUC
+#(area under the curve) which are typical performance measurements
+#for a binary classifier.
+#The ROC (Receiver Operating Characteristic curve) is a curve generated by plotting the true positive rate (TPR = sensitivity) against
+# the false positive rate (FPR= specificity) at various threshold settings while the AUC is
+# the area under the ROC curve. As a rule of thumb, a model with good
+#predictive ability should have an AUC closer to 1 (1 is ideal) than to 0.5.
+
+library(ROCR)
+p <- predict(LogReg,test, type="response")
+pr <- prediction(p, test$target)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf,colorize = TRUE, print.cutoffs.at=seq(0,1,by=0.1), text.adj=c(-0.2,1.7))
+
+abline(a=0, b= 1)
+
+auc <- performance(pr, measure = "auc")
+auc <- auc@y.values[[1]]
+auc 
+
+
+ 
+
+ # And then a lift chart
+  perf1 <- performance(pr,"lift","rpp")
+  plot(perf1, main="lift curve", colorize=T)
+  
+  
+  #perf
+  plot(prf, col=rainbow(10), 
+     colorize=T, 
+     print.cutoffs.at = seq(0,1,0.1))
+  auc <- performance(pr, measure = "auc")
+  auc <- auc@y.values[[1]]
+  print("########## AUC ###############")
+  print(auc)
+
+  roc.data <- data.frame(fpr=unlist(prf@x.values),
+                       tpr=unlist(prf@y.values),
+                       model="GLM")
+  ggplot(roc.data, aes(x=fpr, ymin=0, ymax=tpr)) +
+  geom_ribbon(alpha=0.2) +
+  geom_line(aes(y=tpr)) +
+  ggtitle(paste0("ROC Curve w/ AUC=", auc))
+
+
+
+```
+
+
+#########################################################################################
+### SVM
+#########################################################################################
+
+
+
+```{r}
+
+rm(list= ls()[!(ls() %in% c('train','test'))])
+# Build best SVM model
+PA_SVM <- svm(target ~ comb + weight, data=train,  kernel = "polynomial")
+
+# Look at the model summary
+summary(PA_SVM)
+
+plot(PA_SVM$index)
+
+# Predict on train data
+pred_Train  =  predict(PA_SVM, train)
+
+plot(pred_Train) # Plot shows more than 0.5 
+
+conf.mat = table(train$target, ifelse(pred_Train> 0.5, 1, 0))
+conf.mat
+cat("Accuracy : ",sum(diag(conf.mat))/sum(conf.mat))
+cat("Recall : ",conf.mat[2,2]/sum(conf.mat[2,]))
+cat("precision : ", conf.mat[2,2]/sum(conf.mat[,2]))
+cat("F1 Score : ", 2*(conf.mat[2,2]/sum(conf.mat[,2])*conf.mat[2,2]/sum(conf.mat[2,]))/((conf.mat[2,2]/sum(conf.mat[,2])+conf.mat[2,2]/sum(conf.mat[2,]))))
+
+# Predict on test data
+pred_Test  =  predict(PA_SVM, test[setdiff(names(test),c('target'))])
+conf.mat = table(test$target, ifelse(pred_Test> 0.5, 1, 0))
+conf.mat
+cat("Accuracy : ",sum(diag(conf.mat))/sum(conf.mat))
+cat("Recall : ",conf.mat[2,2]/sum(conf.mat[2,]))
+cat("precision : ", conf.mat[2,2]/sum(conf.mat[,2]))
+cat("F1 Score : ", 2*(conf.mat[2,2]/sum(conf.mat[,2])*conf.mat[2,2]/sum(conf.mat[2,]))/((conf.mat[2,2]/sum(conf.mat[,2])+conf.mat[2,2]/sum(conf.mat[2,]))))
+
+
+
+```
+
+The Data too non linear calculate the prediction using the raw data.
+
+So, Has done feature engineering using response rate on gender and solved the problem to cross 90% accuracy
+
+Have calculated this problem using the response rate.
+
+The refered the following URL to solve the problem 
+
+https://en.wikipedia.org/wiki/Response_rate_(survey)
+
+https://www.analyticsvidhya.com/blog/2015/11/easy-methods-deal-categorical-variables-predictive-modeling/
+
+https://www.analyticsvidhya.com/blog/2016/02/guide-build-predictive-models-segmentation/  
